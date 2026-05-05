@@ -1,0 +1,89 @@
+{
+  "name": "001. basic chatbot",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "84acb0f1-9560-48ca-8253-a1bc45e2eff2",
+      "name": "When chat message received",
+      "webhookId": "ee53c05b-9ce5-41c0-86cc-e93476770652"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        208,
+        0
+      ],
+      "id": "665413cb-8ef7-4983-a782-23663c169cf6",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3-flash-preview",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        176,
+        224
+      ],
+      "id": "5b695dc4-8f82-4457-bd47-9b9cdba80e8f",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5r6I3cY83rYCIH5d",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "036787bc-6f9f-4ae0-876b-fddc8a249765",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "d2db428242075c5b295ce72f32db72d0fee3f583be4557fc8363d7db911dbabc"
+  },
+  "id": "kSBFJN3HcyzgAtRY",
+  "tags": []
+}
