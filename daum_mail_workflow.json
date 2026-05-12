@@ -1,0 +1,223 @@
+{
+  "name": "Daum 메일 거래명세서 추출기",
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "Asia/Seoul"
+  },
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-0000-0000-000000000001",
+      "name": "워크플로우 시작",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [100, 300],
+      "parameters": {}
+    },
+    {
+      "id": "a1b2c3d4-0002-0000-0000-000000000002",
+      "name": "메일 URL 설정",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [320, 300],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-001",
+              "name": "mailUrl",
+              "value": "https://mail.daum.net/top/ALL/0000000000010dp",
+              "type": "string"
+            },
+            {
+              "id": "field-002",
+              "name": "mailId",
+              "value": "0000000000010dp",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0003-0000-0000-000000000003",
+      "name": "Daum IMAP 메일 읽기",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [560, 300],
+      "parameters": {
+        "mailbox": "INBOX",
+        "format": "simple",
+        "postProcessAction": "nothing",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "downloadAttachments": false,
+          "customEmailConfig": "[\"ALL\"]"
+        }
+      },
+      "credentials": {
+        "imap": {
+          "id": "k7sySsvdzzpKvSXi",
+          "name": "Daum IMAP"
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0004-0000-0000-000000000004",
+      "name": "수신문서 URL 추출",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "parameters": {
+        "jsCode": "// 이메일 HTML에서 '수신문서보기' 버튼 URL 추출\nconst emails = $input.all();\nlet docUrl = null;\nlet targetEmail = null;\n\nfor (const emailItem of emails) {\n  const email = emailItem.json;\n  const html = email.html || '';\n  if (!html) continue;\n\n  // 패턴1: <a href=\"...\">수신문서보기</a>\n  const p1 = /<a[^>]+href=['\"]([^'\"]+)['\"][^>]*>[^<]*수신문서[^<]*<\\/a>/gi;\n  let m = p1.exec(html);\n  if (m) {\n    docUrl = m[1].startsWith('http') ? m[1] : 'https:' + m[1];\n    targetEmail = email;\n    break;\n  }\n\n  // 패턴2: '수신문서보기' 텍스트 주변 href 탐색\n  const idx = html.indexOf('수신문서보기');\n  if (idx > -1) {\n    const nearby = html.substring(Math.max(0, idx - 400), idx + 400);\n    const hm = nearby.match(/href=['\"]([^'\"]+)['\"]/i);\n    if (hm) {\n      docUrl = hm[1].startsWith('http') ? hm[1] : 'https:' + hm[1];\n      targetEmail = email;\n      break;\n    }\n    const om = nearby.match(/window\\.open\\(['\"]([^'\"]+)['\"]/i);\n    if (om) { docUrl = om[1]; targetEmail = email; break; }\n  }\n\n  // 패턴3: 거래명세서 관련 도메인 URL\n  const p3 = /href=['\"]([^'\"]*(?:bizboard|etrade|trade|document|명세서)[^'\"]*)['\"]>/gi;\n  const tm = p3.exec(html);\n  if (tm) {\n    docUrl = tm[1].startsWith('http') ? tm[1] : 'https:' + tm[1];\n    targetEmail = email;\n    break;\n  }\n}\n\nif (!targetEmail && emails.length > 0) targetEmail = emails[0].json;\n\nreturn [{\n  json: {\n    subject: targetEmail?.subject || '(제목없음)',\n    from: targetEmail?.from || '',\n    date: targetEmail?.date || '',\n    docUrl: docUrl,\n    docUrlFound: !!docUrl,\n    emailCount: emails.length\n  }\n}];"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0005-0000-0000-000000000005",
+      "name": "URL 존재 확인",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1040, 300],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json.docUrl }}",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0006-0000-0000-000000000006",
+      "name": "거래명세서 페이지 요청",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 160],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('수신문서 URL 추출').first().json.docUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            },
+            {
+              "name": "Accept-Language",
+              "value": "ko-KR,ko;q=0.9"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 5
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0007-0000-0000-000000000007",
+      "name": "거래명세서 데이터 파싱",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 160],
+      "parameters": {
+        "jsCode": "// 거래명세서 HTML에서 구조화 데이터 추출\nconst html = $input.first().json.data || '';\n\nfunction clean(h) {\n  return h.replace(/<br\\s*\\/?>/gi, ' ')\n          .replace(/<[^>]+>/g, '')\n          .replace(/&nbsp;/g, ' ')\n          .replace(/&amp;/g, '&')\n          .replace(/&lt;/g, '<')\n          .replace(/&gt;/g, '>')\n          .replace(/&quot;/g, '\"')\n          .replace(/\\s+/g, ' ').trim();\n}\n\nfunction parseTables(html) {\n  const tables = [];\n  const trx = /<table[\\s\\S]*?<\\/table>/gi;\n  let tm;\n  while ((tm = trx.exec(html)) !== null) {\n    const rows = [];\n    const rrx = /<tr[^>]*>([\\s\\S]*?)<\\/tr>/gi;\n    let rm;\n    while ((rm = rrx.exec(tm[0])) !== null) {\n      const cells = [];\n      const crx = /<t[dh][^>]*>([\\s\\S]*?)<\\/t[dh]>/gi;\n      let cm;\n      while ((cm = crx.exec(rm[1])) !== null) cells.push(clean(cm[1]));\n      if (cells.some(c => c)) rows.push(cells);\n    }\n    if (rows.length) tables.push(rows);\n  }\n  return tables;\n}\n\nconst tables = parseTables(html);\nconst text = clean(html);\n\n// 품목 테이블 탐지\nconst KEYS = ['품목', '수량', '단가', '금액', '공급가액', '규격'];\nconst itemTable = tables.find(t =>\n  t.length >= 2 && t[0].some(c => KEYS.some(k => c.includes(k)))\n);\n\nlet 품목목록 = [];\nif (itemTable) {\n  const headers = itemTable[0];\n  품목목록 = itemTable.slice(1)\n    .filter(r => r.some(c => c.trim()))\n    .map(r => {\n      const obj = {};\n      headers.forEach((h, i) => { if (h.trim()) obj[h.trim()] = (r[i] || '').trim(); });\n      return obj;\n    });\n}\n\n// 금액 합계\nconst 금액합계 = {};\n[['공급가액', /공급가액[^\\d]*([\\d,]+)/],\n ['세액',    /세액[^\\d]*([\\d,]+)/],\n ['합계',    /합계[^\\d]*([\\d,]+)/],\n ['청구금액', /청구금액[^\\d]*([\\d,]+)/]]\n.forEach(([k, rx]) => { const m = text.match(rx); if (m) 금액합계[k] = m[1]; });\n\n// 거래처 정보\nconst 거래처 = {};\n[['공급자',      /공급자[^:：]*[:：]\\s*([^\\n<]{1,30})/],\n ['공급받는자',  /공급받는\\s*자[^:：]*[:：]\\s*([^\\n<]{1,30})/],\n ['사업자번호',  /사업자\\s*번호[^:：]*[:：]\\s*([\\d\\-]{1,20})/],\n ['작성일자',   /작성\\s*일자[^:：]*[:：]\\s*([\\d\\.\\-\\/]{1,15})/]]\n.forEach(([k, rx]) => { const m = text.match(rx); if (m) 거래처[k] = m[1].trim(); });\n\nreturn [{\n  json: {\n    거래명세서: {\n      거래처정보: 거래처,\n      품목목록: 품목목록,\n      금액합계: 금액합계,\n      원문미리보기: text.substring(0, 500),\n      파싱테이블수: tables.length\n    }\n  }\n}];"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0008-0000-0000-000000000008",
+      "name": "에러 안내",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1280, 440],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "err-001",
+              "name": "오류메시지",
+              "value": "'수신문서보기' URL을 이메일 HTML에서 찾지 못했습니다.",
+              "type": "string"
+            },
+            {
+              "id": "err-002",
+              "name": "확인된이메일수",
+              "value": "={{ $('수신문서 URL 추출').first().json.emailCount }}",
+              "type": "number"
+            },
+            {
+              "id": "err-003",
+              "name": "메일제목",
+              "value": "={{ $('수신문서 URL 추출').first().json.subject }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "워크플로우 시작": {
+      "main": [
+        [{ "node": "메일 URL 설정", "type": "main", "index": 0 }]
+      ]
+    },
+    "메일 URL 설정": {
+      "main": [
+        [{ "node": "Daum IMAP 메일 읽기", "type": "main", "index": 0 }]
+      ]
+    },
+    "Daum IMAP 메일 읽기": {
+      "main": [
+        [{ "node": "수신문서 URL 추출", "type": "main", "index": 0 }]
+      ]
+    },
+    "수신문서 URL 추출": {
+      "main": [
+        [{ "node": "URL 존재 확인", "type": "main", "index": 0 }]
+      ]
+    },
+    "URL 존재 확인": {
+      "main": [
+        [{ "node": "거래명세서 페이지 요청", "type": "main", "index": 0 }],
+        [{ "node": "에러 안내", "type": "main", "index": 0 }]
+      ]
+    },
+    "거래명세서 페이지 요청": {
+      "main": [
+        [{ "node": "거래명세서 데이터 파싱", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}
